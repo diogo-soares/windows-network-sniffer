@@ -11,40 +11,69 @@ namespace windows_network_sniffer
     {
         static void Main(string[] args)
         {
-            Console.WriteLine("Sniffer de Rede");
-            Console.WriteLine("+++++++++++++++");
+            try
+            {
+                Run(args);
+            }
+            catch (Exception exception)
+            {
+                Console.WriteLine("Fatal: " + exception.Message);
+            }
+        }
+
+        static void Run(string[] args)
+        {
+            Console.WriteLine("Analisador de Pacote de Rede");
+            Console.WriteLine("^^^^^^^^^^^^^^^^^^^^^^^^^^^^");
 
             var ipAddress = SelectIPAddress();
-
             Console.WriteLine("IP: " + ipAddress);
 
             var socket = CreateSocket(ipAddress);
 
-
-            var buffer = new byte[65535];
+            var buffer = new byte[ushort.MaxValue];
             var bufferLength = socket.Receive(buffer);
 
-            Console.WriteLine("Bytes" + bufferLength);
+            Console.WriteLine("Bytes: " + bufferLength);
             Console.WriteLine(Encoding.Default.GetString(buffer));
         }
 
-        private static object CreateSocket(IPAddress ipAdress)
+        static Socket CreateSocket(IPAddress ipAddress)
         {
+            if (Environment.OSVersion.Platform == PlatformID.Unix)
+            {
+                throw new NotImplementedException("SocketType.Raw not works on Linux.");
+            }
+
             var socket = new Socket(
-                ipAdress.AddressFamily,
+                ipAddress.AddressFamily,
                 SocketType.Raw,
                 ProtocolType.IP);
 
-            socket.Bind(new IPEndPoint(ipAdress, 0));
+            var ipEndPoint = new IPEndPoint(ipAddress, 0);
+            socket.Bind(ipEndPoint);
 
-            socket.SetSocketOption(SocketOptionLevel.IP, SocketOptionName.HeaderIncluded, true);
+            if (ipAddress.AddressFamily == AddressFamily.InterNetworkV6)
+            {
+                throw new NotImplementedException("SocketOptionName.HeaderIncluded works only for IPv4.");
+            }
 
-            var optionIn = new byte[] {1,2,3,4};
+            socket.SetSocketOption(
+                SocketOptionLevel.IP,
+                SocketOptionName.HeaderIncluded,
+                true);
 
+            if (Environment.OSVersion.Platform != PlatformID.Win32NT)
+            {
+                throw new NotImplementedException("IOControlCode.ReceiveAll works only on Windows.");
+            }
+
+            var optionIn = new byte[] { 1, 0, 0, 0 };
+            var optionOut = new byte[4];
             socket.IOControl(
                 IOControlCode.ReceiveAll,
                 optionIn,
-                new byte[4]);
+                optionOut);
 
             return socket;
         }
